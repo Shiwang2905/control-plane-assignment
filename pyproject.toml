@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tenant-control-plane"
+version = "0.1.0"
+description = "Tenant provisioning control plane: REST API + transactional outbox + idempotent Kafka consumer"
+requires-python = ">=3.12"
+# Exact pins: the stack must build identically on a reviewer's machine.
+dependencies = [
+  "fastapi==0.165.0",
+  "uvicorn[standard]==0.54.0",
+  "asyncpg==0.32.0",
+  "aiokafka==0.15.0",
+  "pydantic==2.13.5",
+  "pydantic-settings==2.16.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.5.0",
+  "pytest-cov==7.1.0",
+  "httpx==0.28.1",
+  "ruff==0.17.6",
+  "mypy==2.3.1",
+  "bandit==1.9.4",
+]
+
+[project.scripts]
+control-plane = "control_plane.main:run"
+worker-sim = "worker_sim.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+control_plane = ["migrations/*.sql"]
+
+# ---------------------------------------------------------------- quality gates
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+# pip leaves a copy of the sources in build/ inside the image; never lint that copy.
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, B bugbear, UP pyupgrade, ASYNC async pitfalls,
+# S bandit-lite, SIM simplify, RUF ruff-specific, PT pytest style
+select = ["E", "W", "F", "I", "B", "UP", "ASYNC", "S", "SIM", "RUF", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S311"]   # asserts and non-crypto random are fine in tests
+"scripts/**" = ["S311"]
+"src/worker_sim/**" = ["S311"]  # simulator uses random for fake outcomes, not crypto
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["control_plane", "worker_sim"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["aiokafka.*", "asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["e2e: needs the full docker-compose stack (api + worker + redpanda)"]
+
+[tool.coverage.run]
+source = ["control_plane", "worker_sim"]
+branch = true
